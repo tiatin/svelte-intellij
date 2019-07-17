@@ -1,3 +1,6 @@
+// To regenerate ./src/main/gen/dev/blachut/svelte/lang/_SvelteLexer.java, execute the following
+// java -jar jflex-1.7.0-2.jar -d ./src/main/gen/dev/blachut/svelte/lang/ --skel ./idea-flex.skeleton ./src/main/java/dev/blachut/svelte/lang/Svelte.flex --nobak
+
 package dev.blachut.svelte.lang;
 
 import java.util.*;
@@ -38,6 +41,7 @@ ID=[$_a-zA-Z0-9]+
 %state TAG_STRING
 %state SVELTE_INTERPOLATION_PRE
 %state SVELTE_INTERPOLATION
+%state SVELTE_ATTR
 %state SVELTE_TAG_PRE
 %state SVELTE_TAG
 %state SVELTE_TAG_PAREN_AWARE
@@ -85,7 +89,7 @@ ID=[$_a-zA-Z0-9]+
   "@"{ID}            { return BAD_CHARACTER; }
 }
 
-<SVELTE_INTERPOLATION, SVELTE_TAG, SVELTE_TAG_PAREN_AWARE> {
+<SVELTE_INTERPOLATION, SVELTE_TAG, SVELTE_ATTR, SVELTE_TAG_PAREN_AWARE> {
   "{"                { leftBraceCount += 1; return CODE_FRAGMENT; }
   "}"                { if (leftBraceCount == 0) { yybegin(YYINITIAL); return END_MUSTACHE; } else { leftBraceCount -= 1; return CODE_FRAGMENT; } }
 
@@ -104,11 +108,15 @@ ID=[$_a-zA-Z0-9]+
   "'"                         { yybegin(TAG_STRING); quote = '\''; return HTML_FRAGMENT; }
   "\""                        { yybegin(TAG_STRING); quote = '"'; return HTML_FRAGMENT; }
   ">"                         { yybegin(YYINITIAL); return HTML_FRAGMENT; }
+  "{"                         { yybegin(SVELTE_ATTR); return START_MUSTACHE; }
+  "}"                         { if (leftBraceCount == 0) { yybegin(YYINITIAL); return END_MUSTACHE; } else { leftBraceCount -= 1; return CODE_FRAGMENT; } }
 }
 
 <TAG_STRING> {
   "'"                         { if (quote == '\'') yybegin(HTML_TAG); return HTML_FRAGMENT; }
   "\""                        { if (quote == '"') yybegin(HTML_TAG); return HTML_FRAGMENT; }
+  "{"                         { yybegin(SVELTE_ATTR); return START_MUSTACHE; }
+  "}"                         { if (leftBraceCount == 0) { yybegin(YYINITIAL); return END_MUSTACHE; } else { leftBraceCount -= 1; return CODE_FRAGMENT; } }
 }
 
 [^]                           { return HTML_FRAGMENT; }
