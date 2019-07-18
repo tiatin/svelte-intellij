@@ -7,7 +7,7 @@ plugins {
 apply plugin: "kotlin"
 
 group 'dev.blachut.svelte.lang'
-version '0.7.1'
+version '0.7.3'
 
 sourceCompatibility = 1.8
 
