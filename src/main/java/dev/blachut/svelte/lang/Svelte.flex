@@ -18,6 +18,7 @@ import static dev.blachut.svelte.lang.psi.SvelteTypes.*;
   private int leftBraceCount;
   private int leftParenCount;
   private int lastState;
+  private boolean hadSpaces;
 %}
 
 //%debug
@@ -31,6 +32,7 @@ import static dev.blachut.svelte.lang.psi.SvelteTypes.*;
 %eof{
   leftBraceCount = 0;
   leftParenCount = 0;
+  hadSpaces = false;
 %eof}
 
 WHITE_SPACE=\s+
@@ -45,7 +47,9 @@ ID=[$_a-zA-Z0-9]+
 %state SVELTE_ATTR
 %state SVELTE_TAG_PRE
 %state SVELTE_TAG
-%state SVELTE_TAG_PAREN_AWARE
+%state COMMA_OR_PAREN_AWARE
+%state IF_AWARE
+%state AS_AWARE
 
 %%
 <YYINITIAL> {
@@ -61,21 +65,30 @@ ID=[$_a-zA-Z0-9]+
 
 <SVELTE_TAG_PRE> {
   "if"               { yybegin(SVELTE_TAG); return IF; }
-  "each"             { yybegin(SVELTE_TAG); return EACH; }
+  "each"             { hadSpaces = false; yybegin(AS_AWARE); return EACH; }
   "await"            { yybegin(SVELTE_TAG); return AWAIT; }
   "then"             { yybegin(SVELTE_TAG); return THEN; }
   "catch"            { yybegin(SVELTE_TAG); return CATCH; }
-  "else"             { yybegin(SVELTE_TAG); return ELSE; }
+  "else"             { hadSpaces = false; yybegin(IF_AWARE); return ELSE; }
   {ID}               { yybegin(SVELTE_TAG); return BAD_CHARACTER; }
   {WHITE_SPACE}      { return BAD_CHARACTER; }
 }
-<SVELTE_TAG, SVELTE_TAG_PAREN_AWARE> {
-  \s+"as"\s+         { yybegin(SVELTE_TAG_PAREN_AWARE); return AS; }
-  ","                { if (leftBraceCount == 0) { return COMMA; } else { return CODE_FRAGMENT; } }
-  {WHITE_SPACE}      { if (leftBraceCount == 0) { return WHITE_SPACE; } else { return CODE_FRAGMENT; } }
+
+<AS_AWARE> {
+  "as"{ID}           { hadSpaces = false; return CODE_FRAGMENT; }
+  "as"               { if (hadSpaces) {yybegin(COMMA_OR_PAREN_AWARE); return AS; } else { return CODE_FRAGMENT; } }
+  {WHITE_SPACE}      { hadSpaces = true; return WHITE_SPACE; }
 }
 
-<SVELTE_TAG_PAREN_AWARE> {
+<IF_AWARE> {
+  "if"               { yybegin(SVELTE_TAG); return hadSpaces ? IF : BAD_CHARACTER; }
+  {WHITE_SPACE}      { hadSpaces = true; return WHITE_SPACE; }
+  "}"                { yybegin(YYINITIAL); return END_MUSTACHE; }
+  [^]                { return BAD_CHARACTER; }
+}
+
+<COMMA_OR_PAREN_AWARE> {
+  ","                { if (leftBraceCount == 0) { return COMMA; } else { return CODE_FRAGMENT; } }
   "("                { leftParenCount += 1; if (leftParenCount == 1) { return START_PAREN; } else { return CODE_FRAGMENT; } }
   ")"                { leftParenCount -= 1; if (leftParenCount == 0) { return END_PAREN; } else { return CODE_FRAGMENT; } }
 }
@@ -86,17 +99,15 @@ ID=[$_a-zA-Z0-9]+
   "@"{ID}            { return BAD_CHARACTER; }
 }
 
-<SVELTE_INTERPOLATION, SVELTE_TAG, SVELTE_TAG_PAREN_AWARE> {
-  "{"                { leftBraceCount += 1; return CODE_FRAGMENT; }
-  "}"                { if (leftBraceCount == 0) { yybegin(YYINITIAL); return END_MUSTACHE; } else { leftBraceCount -= 1; return CODE_FRAGMENT; } }
-
-  [^]                { return CODE_FRAGMENT; }
+<SVELTE_INTERPOLATION, SVELTE_TAG, COMMA_OR_PAREN_AWARE, AS_AWARE> {
+  "{"                { hadSpaces = false; leftBraceCount += 1; return CODE_FRAGMENT; }
+  "}"                { if (leftBraceCount == 0) { yybegin(YYINITIAL); return END_MUSTACHE; } else { hadSpaces = false; leftBraceCount -= 1; return CODE_FRAGMENT; } }
+  [^]                { hadSpaces = false; return CODE_FRAGMENT; }
 }
 
 <SVELTE_ATTR> {
   "{"                { leftBraceCount += 1; return CODE_FRAGMENT; }
   "}"                { if (leftBraceCount == 0) { yybegin(lastState); return END_MUSTACHE; } else { leftBraceCount -= 1; return CODE_FRAGMENT; } }
-
   [^]                { return CODE_FRAGMENT; }
 }
 
